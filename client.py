@@ -3,17 +3,60 @@ import threading
 import sys
 import time
 import queue
-import msvcrt   # ✅ Windows 输入
+import readchar
 
 SERVER_IP = "127.0.0.1"
 SERVER_PORT = 9000
+USERNAME = ""
 MAX_MESSAGE_LENGTH = 1 << 20
 
 leave = False
 PRINT_MESSAGE = queue.Queue()
 SEND_MESSAGE = queue.Queue()
 
-END_ESCAPE = "\t"   # 消息分隔符
+END_ESCAPE = "\t"  # end sign of a message
+
+theme_color = 28  # preferred color
+theme_color2 = 18  # preferred color 2
+theme_color3 = 12  # preferred color 3
+
+color_pairs = [
+    "\033[38;5;196m",  # vivid red
+    "\033[38;5;197m",  # strong red
+    "\033[38;5;198m",  # deep pink-red
+    "\033[38;5;199m",  # pinkish red
+    "\033[38;5;200m",  # magenta-red
+    "\033[38;5;201m",  # bright magenta
+    "\033[38;5;202m",  # red-orange
+    "\033[38;5;203m",  # warm orange-red
+    "\033[38;5;204m",  # coral
+    "\033[38;5;205m",  # pink-orange
+    "\033[38;5;206m",  # light magenta-pink
+    "\033[38;5;208m",  # pure orange
+    "\033[38;5;209m",  # light orange
+    "\033[38;5;210m",  # peach
+    "\033[38;5;211m",  # soft pink
+    "\033[38;5;212m",  # pale pink
+    "\033[38;5;214m",  # golden orange
+    "\033[38;5;215m",  # warm golden
+    "\033[38;5;216m",  # sand
+    "\033[38;5;217m",  # light salmon
+    "\033[38;5;218m",  # pastel pink
+    "\033[38;5;220m",  # yellow
+    "\033[38;5;221m",  # light yellow
+    "\033[38;5;222m",  # pale yellow
+    "\033[38;5;223m",  # cream
+    "\033[38;5;190m",  # yellow-green
+    "\033[38;5;154m",  # light green
+    "\033[38;5;118m",  # bright green
+    "\033[38;5;82m",  # vivid green
+    "\033[38;5;46m",  # pure green
+]
+
+
+def coloring(x, k):
+    global color_pairs
+    return color_pairs[k] + x + "\033[0m"
 
 
 # ================= UI =================
@@ -22,40 +65,34 @@ class ChatUI:
         self._running = False
         self._lock = threading.Lock()
         self._buffer = []
-        self._prompt = "> "
+        self._prompt = coloring("> ", theme_color3)
 
     def start(self):
         self._running = True
-
-        # 输入线程
-        threading.Thread(target=self._input_loop, daemon=True).start()
-
-        self._render_prompt()
-
-        while self._running:
-            time.sleep(0.05)
-
-    def stop(self):
-        self._running = False
+        self._input_loop()
 
     def push_message(self, msg):
         with self._lock:
-            self._clear_line()
-            print(msg)
-            self._render_prompt()
+            self._clear_line()  # clear the user line
+            if msg == f"Welcome {USERNAME} to the chatroom!":
+                print(f"Welcome {coloring(USERNAME, theme_color3)} to the chatroom!")
+            elif msg[: len(USERNAME)] == USERNAME:
+                print(coloring(USERNAME, theme_color3) + msg[len(USERNAME) :])
+            else:
+                print(msg)
+            self._render_prompt()  # rerender the user line
 
     def _input_loop(self):
-        while self._running:
-            ch = msvcrt.getch()
-
+        global leave
+        while not leave:
             try:
-                ch = ch.decode()
-            except:
-                continue
+                ch = readchar.readchar()
+            except KeyboardInterrupt:
+                leave = True
+                SEND_MESSAGE.put("__EXIT__")  # tell server I'm leaving
 
             with self._lock:
-                # Enter
-                if ch == "\r":
+                if ch == readchar.key.ENTER:
                     msg = "".join(self._buffer)
                     self._buffer.clear()
 
@@ -66,34 +103,27 @@ class ChatUI:
 
                     self._render_prompt()
 
-                # Backspace
-                elif ch == "\x08":
+                elif ch == readchar.key.BACKSPACE:
                     if self._buffer:
                         self._buffer.pop()
+                        self._clear_line()
                         self._render_prompt()
 
-                # Ctrl+C
-                elif ch == "\x03":
-                    self.stop()
-                    SEND_MESSAGE.put("__EXIT__")
-                    break
-
-                # 普通字符
+                # normal characters
                 else:
                     self._buffer.append(ch)
                     sys.stdout.write(ch)
                     sys.stdout.flush()
+        print("READCHAR break")
 
     def _clear_line(self):
-        sys.stdout.write("\r\033[K")
+        sys.stdout.write("\r\033[K")  # clear a line
 
     def _render_prompt(self):
         sys.stdout.write("\r")
         sys.stdout.write(self._prompt + "".join(self._buffer))
         sys.stdout.flush()
 
-
-# ================= 网络 =================
 
 def importantPrint(x):
     print("\n" + len(x) * "*")
@@ -111,7 +141,7 @@ def listen(sock):
 
             msg = data.decode()
 
-            # 按协议拆分
+            # split by end signal
             for m in msg.split(END_ESCAPE):
                 if m.strip():
                     PRINT_MESSAGE.put(m)
@@ -143,33 +173,83 @@ def write(ui):
             break
 
 
-# ================= 主程序 =================
+def enter_prompt1():
+    global SERVER_IP
+    global SERVER_PORT
+    global theme_color
+    global theme_color2
+    print(
+        f"Enter Server {coloring('IP', theme_color)} (press Enter to use default configuration {coloring(SERVER_IP, theme_color)}):",
+        end=" ",
+    )
+    x = input()
+    if x != "":
+        SERVER_IP = x
+    while True:
+        try:
+            print(
+                f"Enter Server {coloring('PORT', theme_color2)} (press Enter to use default configuration {coloring(str(SERVER_PORT), theme_color2)}):",
+                end=" ",
+            )
+            x = input()
+            if x != "":
+                SERVER_PORT = int(x)
+            break
+        except ValueError:
+            print("Please use \033[48;5;213mINT\033[0m type input!")
+    print(
+        f"Your setting now is {coloring(SERVER_IP, theme_color)}:{coloring(str(SERVER_PORT), theme_color2)}"
+    )
+
 
 def main():
+
     global leave
+    global theme_color
+    global theme_color2
+    global SERVER_IP
+    global SERVER_PORT
+    global USERNAME
 
-    s = socket.socket()
-    print("Prepare to connect...")
+    try:
+        while True:
+            SERVER_IP = "127.0.0.1"
+            SERVER_PORT = 9000
+            enter_prompt1()
 
-    s.connect((SERVER_IP, SERVER_PORT))
+            s = socket.socket()
+            print("Prepare to connect...")
 
-    importantPrint(f"Connected to server {SERVER_IP}:{SERVER_PORT}")
+            try:
+                s.connect((SERVER_IP, SERVER_PORT))
+                break
+            except ConnectionRefusedError:
+                print("\033[48;5;196mFailed to connect to server!\033[0m")
+            except (OSError, OverflowError, ValueError):
+                print("\033[48;5;196mWrong format!\033[0m")
 
-    # 输入用户名
-    username = input("Enter your username: ")
-    s.send((username + END_ESCAPE).encode())
+        print(
+            f"\033[48;5;35mConnected to server\033[0m {coloring(SERVER_IP, theme_color)}:{coloring(str(SERVER_PORT), theme_color2)}"
+        )
+    except KeyboardInterrupt:
+        print()
+        print("\033[48;5;213mCtrl+C\033[0m captured! Quit the code。")
+        exit(0)
 
-    # 启动线程
+    # username
+    USERNAME = input("Enter your username: ")
+    s.send((USERNAME + END_ESCAPE).encode())
+
     threading.Thread(target=listen, args=(s,), daemon=True).start()
     threading.Thread(target=send, args=(s,), daemon=True).start()
 
     ui = ChatUI()
     threading.Thread(target=write, args=(ui,), daemon=True).start()
 
-    ui.start()
+    ui.start()  # main thraed
 
-    time.sleep(0.5)
     s.close()
+    leave = True
 
 
 if __name__ == "__main__":
