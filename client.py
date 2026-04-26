@@ -90,9 +90,15 @@ class ChatUI:
             except KeyboardInterrupt:
                 leave = True
                 SEND_MESSAGE.put("__EXIT__")  # tell server I'm leaving
+                break
 
             with self._lock:
-                if ch == readchar.key.ENTER:
+                if ch == "\x03":
+                    leave = True
+                    SEND_MESSAGE.put("__EXIT__")  # tell server I'm leaving
+                    break
+
+                elif ch == readchar.key.ENTER:
                     msg = "".join(self._buffer)
                     self._buffer.clear()
 
@@ -114,6 +120,7 @@ class ChatUI:
                     self._buffer.append(ch)
                     sys.stdout.write(ch)
                     sys.stdout.flush()
+
         print("READCHAR break")
 
     def _clear_line(self):
@@ -233,7 +240,7 @@ def main():
         )
     except KeyboardInterrupt:
         print()
-        print("\033[48;5;213mCtrl+C\033[0m captured! Quit the code。")
+        print("\033[48;5;213mCtrl+C\033[0m captured! Quit the chatroom.")
         exit(0)
 
     # username
@@ -247,6 +254,7 @@ def main():
     threading.Thread(target=write, args=(ui,), daemon=True).start()
 
     ui.start()  # main thraed
+    print("\033[48;5;213mCtrl+C\033[0m captured! Quit the chatroom.")
 
     s.close()
     leave = True
