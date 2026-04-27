@@ -94,9 +94,6 @@ class ChatUI:
             except KeyboardInterrupt:
                 leave = True
                 SEND_MESSAGE.put("__EXIT__")  # tell server I'm leaving
-<<<<<<< HEAD
-                break
-=======
                 import os
 
                 os._exit(0)
@@ -104,7 +101,6 @@ class ChatUI:
                 leave = True
                 SEND_MESSAGE.put("__EXIT__")
                 print("\nExiting...")
->>>>>>> main
 
             with self._lock:
                 if ch == "\x03":

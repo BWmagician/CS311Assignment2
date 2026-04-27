@@ -2,21 +2,15 @@ import socket
 import threading
 
 clients = []
-<<<<<<< HEAD
-=======
 debug = True
 CODE_ESCAPE = "_"
 MESSAGE_ESCAPE = "*"
->>>>>>> main
 
 
 def broadcast(msg, sender):
     msg = msg.encode()
-<<<<<<< HEAD
-=======
     global clients
     global debug
->>>>>>> main
     for c, name in clients:
         if c != sender:
             try:
@@ -40,26 +34,6 @@ def broadcast(msg, sender):
 
 
 def handle(conn):
-<<<<<<< HEAD
-    name = conn.recv(1024).decode().strip()
-    clients.append((conn, name))
-    print("{} has joined the chatroom.".format(name))
-    broadcast("{} has joined the chatroom!".format(name), conn)
-    conn.send(f"Welcome {name} to the chatroom!".encode())
-    while True:
-        data = conn.recv(1024).strip()
-        if not data:
-            break
-        msg = data.decode()
-        if msg == "__EXIT__":
-            print("{} has left the chatroom.".format(name))
-            broadcast("{} has left the chatroom!".format(name), conn)
-            break
-        print("[*] {}: {}".format(name, msg))
-        s = "{}: {}".format(name, msg)
-        broadcast(s, conn)
-        conn.send(s.encode())
-=======
     global debug
     global clients
     name = conn.recv(1024).decode().strip()
@@ -99,7 +73,6 @@ def handle(conn):
             conn.send(s.encode())
         else:
             print("\033[48;5;196mMessage Corrupted.\033[0m. Received: " + msg)
->>>>>>> main
     conn.close()
     clients.remove((conn, name))
 
