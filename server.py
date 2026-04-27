@@ -48,7 +48,7 @@ def handle(conn):
         try:
             data = conn.recv(1024).strip()
         except socket.timeout:  # say the client is offline, kick it off automatically
-            conn.send("__KICK__")
+            conn.send(("__KICK__").encode())
             break
         if not data:
             break

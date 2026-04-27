@@ -4,6 +4,7 @@ import sys
 import time
 import queue
 import readchar
+import os
 
 debug = False
 SERVER_IP = "127.0.0.1"
@@ -86,6 +87,7 @@ class ChatUI:
                 print(coloring(USERNAME, theme_color3) + msg[len(USERNAME) :])
             else:
                 print(msg)
+            print()  # add a empty line after each push
             self._render_prompt()  # rerender the user line
 
     def _input_loop(self):
@@ -114,10 +116,13 @@ class ChatUI:
                     break
 
                 elif ch == readchar.key.ENTER:
-                    msg = "".join(self._buffer)
-                    self._buffer.clear()
+                    if not self._buffer:  # nothing to sumbit
+                        continue
 
-                    self._clear_line()
+                    msg = "".join(self._buffer)
+
+                    self._clear_line()  # based on buffer
+                    self._buffer.clear()
 
                     if msg.strip():
                         SEND_MESSAGE.put(MESSAGE_ESCAPE + msg)
@@ -140,7 +145,25 @@ class ChatUI:
             print("\033[48;5;136mDEBUG\033[0m Leaving UI")
 
     def _clear_line(self):
-        sys.stdout.write("\r\033[K")  # clear a line
+        col = os.get_terminal_size().columns
+        clear_len = 2 + len(self._buffer)
+
+        sys.stdout.write("\r\033[K")  # 清除该行
+
+        for i in range(-1 + (clear_len // col) + 1 if ((clear_len % col) > 0) else 0):
+            sys.stdout.write("\033[A")  # 光标上移一行
+            sys.stdout.write("\r\033[K")  # 清除该行
+
+        # print(
+        #     "len is:",
+        #     (clear_len // col) + 1 if ((clear_len % col) > 0) else 0,
+        #     clear_len,
+        #     col,
+        # )
+
+        # sys.stdout.write(
+        #     "\r\033[K" * ((clear_len // col) + ((clear_len % col) > 0))
+        # )  # clear a line
 
     def _render_prompt(self):
         sys.stdout.write("\r")

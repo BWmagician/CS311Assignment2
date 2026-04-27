@@ -4,7 +4,7 @@ import time
 
 namebook = []
 clients = []
-debug = False
+debug = True
 CODE_ESCAPE = "_"
 MESSAGE_ESCAPE = "*"
 END_ESCAPE = "\t"
@@ -82,7 +82,7 @@ def handle(conn):
         except socket.timeout:  # say the client is offline, kick it off automatically
             if debug:
                 print("\033[48;5;136mDEBUG\033[0m  Send __KICK__ to " + name)
-            conn.send(("__KICK__" + END_ESCAPE).decode())
+            conn.send(("__KICK__" + END_ESCAPE).encode())
             break
         if not data:
             break
