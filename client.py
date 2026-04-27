@@ -5,7 +5,7 @@ import time
 import queue
 import readchar
 
-debug = True
+debug = False
 SERVER_IP = "127.0.0.1"
 SERVER_PORT = 9000
 USERNAME = ""
@@ -16,9 +16,11 @@ PRINT_MESSAGE = queue.Queue()
 SEND_MESSAGE = queue.Queue()
 MESSAGE_ESCAPE = "*"
 CODE_ESCAPE = "_"
-ACK_INTERVAL = 5  # send ack per 5 seconds
-
 END_ESCAPE = "\t"  # end sign of a message
+ACK_INTERVAL = 4  # send ack per 4 seconds
+TIMEOUT_LIMIT = 10
+EXIT_CODE = 0  # 0=ctrl+c 1=abnormal exit
+
 
 theme_color = 28  # preferred color
 theme_color2 = 18  # preferred color 2
@@ -88,19 +90,22 @@ class ChatUI:
 
     def _input_loop(self):
         global leave
+        global EXIT_CODE
         while not leave:
             try:
                 ch = readchar.readchar()
             except KeyboardInterrupt:
                 leave = True
                 SEND_MESSAGE.put("__EXIT__")  # tell server I'm leaving
-                import os
+                EXIT_CODE = 0
+                break
 
-                os._exit(0)
             if ch == "\x03":  # Ctrl+C
                 leave = True
                 SEND_MESSAGE.put("__EXIT__")
                 print("\nExiting...")
+                EXIT_CODE = 0
+                break
 
             with self._lock:
                 if ch == "\x03":
@@ -131,7 +136,8 @@ class ChatUI:
                     sys.stdout.write(ch)
                     sys.stdout.flush()
 
-        print("READCHAR break")
+        if debug:
+            print("\033[48;5;136mDEBUG\033[0m Leaving UI")
 
     def _clear_line(self):
         sys.stdout.write("\r\033[K")  # clear a line
@@ -145,25 +151,41 @@ class ChatUI:
 def listen(sock):
     global leave
     global debug
+    sock.settimeout(TIMEOUT_LIMIT)
     while True:
+        global EXIT_CODE
         try:
             data = sock.recv(MAX_MESSAGE_LENGTH)
-            if not data:
-                break
+        except socket.timeout:
+            leave = True
+            EXIT_CODE = 2  # server is dead
+            break
 
-            msg = data.decode()
+        if not data:
+            break
+
+        data = data.decode()
+
+        if debug:
+            PRINT_MESSAGE.put("\033[48;5;136mDEBUG\033[0m " + data)
+
+        for msg in data.split(END_ESCAPE):
+            if msg == "":
+                continue
+
             escape = msg[0:1]  # extract the first character
-
-            if debug:
-                PRINT_MESSAGE.put("\033[48;5;136mDEBUG\033[0m " + msg)
 
             if escape == CODE_ESCAPE:
                 if msg == "__KICK__":  # which means the server has kick client off
                     leave = True
-                    print(
-                        "You are offline now, please press \033[48;5;213mCtrl+C\033[0m to quit the code"
-                    )
-                    break
+                    print("You are offline now. Quiting the chatroom..")
+                    EXIT_CODE = 1
+                    exit(0)
+                if msg == "__ACK__":
+                    if debug:
+                        PRINT_MESSAGE.put(
+                            "\033[48;5;136mDEBUG\033[0m Recieved online ACK from server"
+                        )
 
             elif escape == MESSAGE_ESCAPE:
                 msg = msg[1:]
@@ -177,9 +199,6 @@ def listen(sock):
                         "\033[48;5;136mDEBUG\033[0m \033[48;5;196mMessage Corrupted\033[0m Received: "
                         + msg
                     )
-
-        except:
-            break
 
     leave = True
     PRINT_MESSAGE.put("Disconnected from server.")
@@ -251,6 +270,7 @@ def main():
     global SERVER_IP
     global SERVER_PORT
     global USERNAME
+    global EXIT_CODE
 
     try:
         while True:
@@ -278,8 +298,45 @@ def main():
         exit(0)
 
     # username
-    USERNAME = input("Enter your username: ")
-    s.send((USERNAME + END_ESCAPE).encode())
+    try:
+        while True:
+            USERNAME = ""
+            while USERNAME == "":  # in case of empty name
+                USERNAME = input("Enter your username: ")
+
+            data = ""
+            while (
+                data != "__NAMEACCEPTED__" and data != "__NAMEREJECTED__"
+            ):  # in case of corruption and TLE
+                ## Send name to the server
+                s.send(USERNAME.encode())
+                try:
+                    s.settimeout(2.0)  # in case of TLE
+                    data = s.recv(1024).decode()
+                except socket.timeout:
+                    s.settimeout(None)  # calcel the special timeout limit
+                    if debug:
+                        print(
+                            "\033[48;5;136mDEBUG\033[0m Timeout when receiving the name"
+                        )
+                if debug:
+                    print(
+                        "\033[48;5;136mDEBUG\033[0m Retransmission of name, received: "
+                        + data
+                    )
+            s.settimeout(None)  # calcel the special timeout limit
+
+            if data == "__NAMEACCEPTED__":
+                break
+
+            print(
+                "Please enter your name again. This problem might occur because there is the same name in the chatroom."
+            )
+
+    except KeyboardInterrupt:
+        print()
+        print("\033[48;5;213mCtrl+C\033[0m captured! Quit the chatroom.")
+        exit(0)
 
     threading.Thread(target=listen, args=(s,), daemon=True).start()
     threading.Thread(target=send, args=(s,), daemon=True).start()
@@ -289,7 +346,13 @@ def main():
     threading.Thread(target=write, args=(ui,), daemon=True).start()
 
     ui.start()  # main thraed
-    print("\033[48;5;213mCtrl+C\033[0m captured! Quit the chatroom.")
+
+    if EXIT_CODE == 0:  # normal exit
+        print("\033[48;5;213mCtrl+C\033[0m captured! Quit the chatroom!")
+    elif EXIT_CODE == 1:  # server kicks you off
+        print("You are now quiting the chatroom because the server kicks you off.")
+    elif EXIT_CODE == 2:
+        print("You are now quiting the chatroom because the server is dead.")
 
     s.close()
     leave = True
